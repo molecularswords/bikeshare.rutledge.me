@@ -1,0 +1,13 @@
+gunicorn
+Flask
+Jinja2
+Werkzeug
+distribute
+wsgiref
+mysql-connector-python-rf
+scikit-learn
+pandas
+numpy
+datetime
+pytz
+simplejson

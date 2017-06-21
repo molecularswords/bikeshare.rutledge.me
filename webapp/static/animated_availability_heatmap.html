@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<style>
+
+#main_chart {
+    position:relative;
+    width: 800px;
+}
+#dropdown {
+  position: absolute;
+  height: 25px;
+  top: 94%;
+  left: 7%;
+  font-size: 19px;
+  font-family: Helvetica;
+  text-align-last: center;
+  font-weight: bold;
+}
+#start_button {
+  width: 80px;
+  height: 25px;
+  position: absolute;
+  top: 94%;
+  left: 25%;
+  font-size: 19px;
+  font-family: Helvetica;
+  text-align-last: center;
+  font-weight: bold;
+}
+
+</style>
+
+<body>
+<div id="main_chart">
+
+    <input id="start_button" type="button" value="Go" onclick="toggleInterval(interval_toggle);" />
+
+    <select id='dropdown' />
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.13/moment-timezone-with-data.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script>
+
+///// Import data
+var stations = []
+  , dataset = []
+  , bikes = []
+
+var lat_start = 38.779
+  , lat_end = 39.03
+  , lng_start = -77.195
+  , lng_end = -76.87
+  , time_interval = 10
+  , base_circle_size = 4;
+
+var start_datetime;
+
+var date_range_end = moment(moment().subtract(1, 'd'));
+var date_range_start = moment(moment().subtract(7, 'd'));
+
+var date_range = [{'label': 'Choose day', 'datetime': 'Choose day', 'value': 0}];
+date_range.push({'label': date_range_start.format('MMM D'), 'datetime': date_range_start.format('YYYY-MM-DD'), 'value': 1});
+
+var date_count = 2;
+while (date_range_start < date_range_end) {
+  date_range.push({'label': date_range_start.add(1, 'd').format('MMM D'), 'datetime': date_range_start.format('YYYY-MM-DD'), 'value': date_count});
+  date_count++;
+}
+
+var day_choice = d3.select("#dropdown")
+
+day_choice.selectAll("option")
+         .data(date_range) // eg., data = [ {'value': 10}, {'value': 11}, {'value': 12} ]
+         .enter()
+         .append("option")
+         .text(function (d) { return d.label; })
+         .attr("value", function (d) { return d.value; })
+         .attr('font-size', '20px')
+         .attr('font-weight', 'bold')
+
+
+day_choice.on("change", function(d) { pleaseWait(); 
+                                      start_datetime = date_range[d3.select(this).property('value')].datetime + ' 03:00'; 
+                                      console.log(start_datetime);
+                                      count = 0; 
+                                      svg.selectAll("circle").transition(100).style('opacity', 0.6).style('fill', 'steelblue'); 
+                                      startVisualization(); 
+                                      svg.selectAll("#time_of_day").remove(); 
+                                      toggleInterval(1);
+              });
+
+var stat_count = 0
+  , stations_to_omit = []
+  , svg
+  , xAxis
+  , xScale
+  , yAxis
+  , yScale
+  , colorScale
+  , linearGradient
+  , defs
+  , totals = {}
+
+var width = 700
+  , height = 700
+  , margin = {top: 30, right: 50, bottom: 50, left: 50}
+  , uid = 0
+  , datasetSize = dataset.length
+  , interval_toggle = 0
+  , count = 0
+  // , colors = ["#ffffcc","#a1dab4","#41b6c4","#2c7fb8","#253494"]; // YlGnBu
+  // , colors = ["#ffffb2","#fecc5c","#fd8d3c","#f03b20","#bd0026"]; // YlOrRd
+  // , colors = ["#e66101","#fdb863","#f7f7f7","#b2abd2","#5e3c99"]; // PuOr
+  // , colors = ["#d7191c","#fdae61","#ffffbf","#a6d96a","#1a9641"]; // RdYlGn
+  // , colors = ["#ca0020","#f4a582","#f7f7f7","#92c5de","#0571b0"]; // RdBu
+  // , colors = ["#d7191c","#fdae61","#ffffbf","#abd9e9","#2c7bb6"]; // RdYlBu
+  // , colors = ["#d73027","#fc8d59","#fee090","#ffffbf","#e0f3f8","#91bfdb","#4575b4"]; // RdYlBu
+  // , colors = ["#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4"]; // RdYlBu
+  , colors = ["#a50026","#d73027","#f46d43","#fdae61","#fee090","#ffffbf","#e0f3f8","#abd9e9","#74add1","#4575b4","#313695"]; // RdYlBu
+
+colors.reverse();
+
+// d3.json(totals_url, function(data) {
+//   /////// Make markers and add them to an array ///////
+//   for (var key in data) {
+//     totals[key] = data[key]
+//   } // end for loop
+// });
+
+var bikes_availability = {};
+
+// Function to get station locations
+function getStationLocations(input) {
+    $.ajax({
+        type: "POST",
+        url: "/station_locations",
+        data: { mydata_stat_locs: input },
+        success: getStationLocationsCallbackFunc
+    });
+} // end getStationLocations
+
+function getStationLocationsCallbackFunc(response) {
+    // The async callback function to do work with the response from getStationLocations
+    station_locations = response;
+    console.log(station_locations);
+    for (var key in station_locations) {
+        // skip loop if the property is from prototype
+        if (!station_locations.hasOwnProperty(key)) continue;
+
+        var obj = station_locations;
+        var prop = key;
+
+        check = 0
+        var station_id = parseInt(prop)
+          , station_lng = parseFloat(obj[prop].lng)
+          , station_lat = parseFloat(obj[prop].lat)
+          , station_radius = base_circle_size;
+        if (station_lng < lng_start || station_lng > lng_end || station_lat < lat_start || station_lat > lat_end) {
+          stations_to_omit.push(prop)
+          check = 1
+        }
+        if (check == 0) {
+          // Add station capacity to a list
+          totals[station_id] = parseInt(obj[prop].capacity)
+          // Add the station coords to list
+          dataset.push([station_id, station_lng, station_lat, station_radius])
+          stations[station_id] = stat_count;
+          stat_count++;
+        }
+    } // end for loop
+    // [0] is uid
+    // [1] will be plotted on the x axis (lng)
+    // [2] will be plotted on the y axis (lat)
+    // [3] will be used as the radius
+
+    // set up the scales
+  xScale = d3.scale.linear()
+        .range([0, width])
+        .domain([lng_start, lng_end]);
+
+  yScale = d3.scale.linear()
+        .range([height, 0])
+        .domain([lat_start, lat_end]);
+
+  // set the axes
+  xAxis = d3.svg.axis()
+    .scale(xScale)
+    .orient('bottom')
+    .outerTickSize(1);
+
+  yAxis = d3.svg.axis()
+    .scale(yScale)
+    .orient('left')
+    .outerTickSize(1);
+
+  // append the svg to the body of the page and set the width and height
+  // append a 'g' element to group the circles together and 'translate'
+  svg = d3.select("#main_chart").append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  svg.append("defs")
+      .append("pattern")
+      .attr("id", "venus")
+      .attr('patternUnits', 'userSpaceOnUse')
+      .attr("width", width)
+      .attr("height", height)
+      .append("image")
+      .attr("xlink:href", 'figures/dc_map_upright.png')
+      .attr("width", width)
+      .attr("height", height);
+
+  svg.append("rect")
+      .attr("x", "0")
+      .attr("y", "0")
+      .attr("width", width)
+      .attr("height", height)
+      .attr("fill", "url(#venus)")
+      .attr('stroke', 'black')
+
+  svg.selectAll("circle")
+      .data(dataset)
+      .enter()
+      .append("circle")  // Add circle svg
+      .style('opacity', 0.6)
+      .style("fill", "steelblue")
+      .style('stroke', 'black')
+      .attr({
+          "cx": function(d) { return xScale(d[1]); },
+          "cy": function(d) { return yScale(d[2]); },
+          "r": function(d) { return d[3]; }
+      });
+
+  // svg.append('rect')
+  //    .attr('x', width*0.809)
+  //    .attr('y', height*0.01)
+  //    .attr('width', 145)
+  //    .attr('height', 100)
+  //    .attr('stroke', 'black')
+  //    .attr('fill', '#a7bed2')
+  //    .attr('fill-opacity', 1)
+
+  svg.selectAll("text").remove()
+  
+  svg.append("text")
+    .attr('id', 'title')
+    .attr('x', width / 2)
+    .attr("y", -10)
+    .attr("text-anchor", "middle")  
+    .style("font-size", "25px")
+    .style('font-weight', 'bold')
+    .style('font-family', 'helvetica')
+    .text('Bike availability over time');
+
+  // legend
+  //Append a defs (for definition) element to your SVG
+  defs = svg.append("defs");
+
+  //Append a linearGradient element to the defs and give it a unique id
+  linearGradient = defs.append("linearGradient")
+      .attr("id", "linear-gradient");
+
+  //Horizontal gradient
+  linearGradient
+    .attr("x1", "0%")
+    .attr("y1", "0%")
+    .attr("x2", "100%")
+    .attr("y2", "0%");
+
+
+  //A color scale
+  colorScale = d3.scale.linear()
+      .range(colors);
+
+  //Append multiple color stops by using D3's data/enter step
+  linearGradient.selectAll("stop") 
+      .data( colorScale.range() )                  
+      .enter().append("stop")
+      .attr("offset", function(d,i) { return i/(colorScale.range().length-1); })
+      .attr("stop-color", function(d) { return d; });
+
+  //Draw the rectangle and fill with gradient
+  svg.append("rect")
+    .attr("width", 130)
+    .attr("height", 25)
+    .attr('x', width * 0.725)
+    .attr('y', height * 1.01)
+    .style("fill", "url(#linear-gradient)");
+
+  svg.append("text")
+    .attr('id', 'legend')
+    .attr('x', width *0.685)
+    .attr("y", height*1.038)
+    .attr("text-anchor", "middle")  
+    .style("font-size", "20px")
+    .style('font-weight', 'bold')
+    .style('font-family', 'helvetica')
+    .text('Less');
+
+  svg.append("text")
+    .attr('id', 'legend')
+    .attr('x', width *0.955)
+    .attr("y", height*1.038)
+    .attr("text-anchor", "middle")  
+    .style("font-size", "20px")
+    .style('font-weight', 'bold')
+    .style('font-family', 'helvetica')
+    .text('More');
+
+    startVisualization();
+} // end getStationLocationsCallbackFunc
+
+getStationLocations('');
+
+function pleaseWait() {
+  svg.append("text")
+    .attr('id', 'please_wait') 
+    .attr('x', width * 0.5)
+    .attr("y", height * 1.04)
+    .attr("text-anchor", "middle")  
+    .style("font-size", "20px")
+    .style('font-weight', 'bold')
+    .style('font-family', 'helvetica')
+    .text('Loading data...');
+}
+
+function pleaseWaitRemove() {
+    svg.selectAll("#please_wait").remove()
+}
+
+function startVisualization() {
+
+  ////////////////////// SYNC MYSQL PART ///////////////////////
+  function getMySQLData(input) {
+      /// input should be in the format 'YYYY-MM-DD'
+      $.ajax({
+          type: "POST",
+          url: "/dots_heatmap",
+          data: { mydata: input },
+          success: getMySQLDataCallBackFunc
+      });
+  } // end getMySQLData
+
+  bikes = [];
+  for (key in stations) {
+    bikes_availability[key] = [];
+  }
+
+  function getMySQLDataCallBackFunc(response) {
+    var data1 = response;
+    console.log(data1)
+
+    //////// Data example //////////////
+    // {'station_1': 123, 'station_2': 123, 'timepoint': 'YYYY-MM-DD HH:MM'}
+
+    // Make it to where the rides data are gathered from mongodb given a start and end datetime range
+    var animated_rides_start = moment(new Date(start_datetime));
+    var animated_rides_end = moment(animated_rides_start.add(1, 'd'));
+
+    animated_rides_end = animated_rides_end.subtract(time_interval, 'm');
+    animated_rides_start = animated_rides_start.subtract(1, 'd');
+
+    var time_list = [animated_rides_start.format('YYYY-MM-DD HH:mm')];
+
+    while (animated_rides_start < animated_rides_end) {
+      time_list.push(animated_rides_start.add(time_interval, 'm').format('YYYY-MM-DD HH:mm'));
+    }
+
+    for (var i = 0; i < time_list.length; i++) {
+
+      for (var dataz in data1) {
+
+        if (time_list[i] == dataz) {
+
+          for (var key in stations) {
+
+            var num_bikes = parseInt(data1[dataz][key]);
+            // var curr_bikes = num_bikes / parseFloat(totals[key]);
+            // var bikes_color = -1;
+
+            bikes_availability[key].push(num_bikes)
+
+            if (typeof bikes[i] == 'undefined') {
+              bikes.push([[key], [getColor(num_bikes, key)]]);
+            } else {
+              bikes[i][0].push(key);
+              bikes[i][1].push(getColor(num_bikes, key));
+            }
+          } // end for loop
+        } // end if
+      } // end for loop
+    } // end for loop
+    console.log(bikes)
+  } // end callback function;
+  getMySQLData(start_datetime)
+}
+
+var newInterval
+
+var transition_time = 150;
+
+newInterval = setInterval(makeRings, transition_time)
+
+function toggleInterval(value) {
+
+  if (value == 1) {
+    interval_toggle = 0;
+    console.log('Visualization paused.')
+    d3.selectAll('#start_button').transition().attr('value', 'Go')
+  } else {
+    console.log('Visualization started.')
+    interval_toggle = 1;
+    d3.selectAll('#start_button').transition().attr('value', 'Pause')
+  }
+
+}
+
+function getColor(num_bikes, station) {
+
+  function median(values) {
+      values.sort( function(a,b) {return a - b;} );
+      var half = Math.floor(values.length/2);
+      if (values.length % 2) {
+          return values[half];
+      } else {
+          return (values[half-1] + values[half]) / 2.0;
+      }
+  }
+
+  var bikes_color = -1;
+  var bikes_median = median(bikes_availability[station])
+  var norm_bikes = parseFloat(num_bikes) / bikes_median
+
+  for (ind = 0; ind < colors.length; ind++) {
+    if (norm_bikes <= ind*(2.25/parseFloat(colors.length))) {
+      bikes_color = colors[ind];
+      break
+    }
+  }
+
+  if (bikes_color == -1) {
+    bikes_color = colors[colors.length-1]
+  }
+
+  return bikes_color;
+
+}
+
+function makeRings() {
+
+  if (bikes.length > 0) {
+    pleaseWaitRemove()
+  }
+
+  if (interval_toggle == 0) {
+    empty_var = 'bleh'
+  } else {
+
+    function getTime(mins) {
+
+      var am_pm = 'AM'
+        , hours = Math.floor(mins*time_interval / 60) + 3
+        , minutes = (mins*time_interval % 60);
+
+      if (hours >= 12) {
+        if (am_pm == 'AM') {
+          am_pm = 'PM';
+        } else {
+          am_pm = 'AM';
+        }
+      }
+
+      if (hours >= 24) {
+        am_pm = 'AM';
+      }
+
+      if (hours == 0) {
+        hours = (12).toString();
+      } 
+
+      while (hours > 12) {
+        hours = hours - 12;
+      }
+
+      hours = hours.toString();
+
+      if (minutes < 10) {
+        minutes = '0' + minutes.toString();
+      } else {
+        minutes = minutes.toString();
+      }
+
+      return hours+':'+minutes+' '+am_pm;
+
+    }
+
+    if (bikes.length > 0) {
+
+      // Make a time display
+
+      svg.selectAll("#time_of_day").remove()
+      svg.append("text")
+        .attr('id', 'time_of_day') 
+        .attr('x', width * 0.5)
+        .attr("y", height * 1.04)
+        .attr("text-anchor", "middle")  
+        .style("font-size", "25px")
+        .style('font-weight', 'bold')
+        .style('font-family', 'helvetica')
+        .text(getTime(count));
+
+      // Get rides that correspond to the count variable (representing the minute of the day)
+      var start_station_ids = []
+        , start_station_nums = [];
+
+      if (typeof bikes[count] != 'undefined') {
+        start_station_ids = bikes[count][0];
+        start_station_nums = bikes[count][1];
+      }
+
+      if (start_station_ids.length) {
+
+        var station_data = [];
+
+        for (i = 0; i < start_station_ids.length; i++) {
+
+          station_data.push([start_station_ids[i], dataset[stations[start_station_ids[i]]][1], 
+                             dataset[stations[start_station_ids[i]]][2], base_circle_size, start_station_nums[i]]);
+        }
+
+        svg.selectAll("circle").data(station_data)
+          .transition()
+          .style('opacity', 0.8)
+          .style('fill', function(d) { return d[4]})
+
+      } // end of if
+
+      if (count*time_interval % 30 == 0) {
+        console.log(getTime(count))
+      }
+      // Stop after a certain number of points is made
+      count++;
+      if (count == 1440/time_interval) {
+        console.log('Did', count, 'points.')
+        count = 0;
+        toggleInterval(1);
+      }
+
+    } // end of if
+
+  }
+
+} 
+
+</script>
+</body>

@@ -1,0 +1,796 @@
+<!--
+
+Purpose:
+To create a webapp that tells users the optimal route to take to have the best chance of easily getting and dropping off a bike in DC's Capital Bikeshare system.
+
+Implementation:
+A simple website that has a few input fields: Starting station, ending station, starting time (or ending time, can choose with a dropdown), and risk level.
+There will be a Google map of stations and lineplots showing the timeseries trace of bike availability at the start station and any waypoints and another lineplot showing timeseries trace of dock availability at the end station and any waypoints.
+The user will input their desired conditions and the algorithm will compute the best route given probabilities of bike/dock availability at the relevant locations.
+The route will be shown as a trace on the Google map.
+The user should be able to click stations and have linegraphs show the availability data.
+The suggestion for where to pick up and drop off a bike will be determined by finding the stations closest to the chosen ones that at the given time have historically had enough bikes/docks above a predetermined threshold and picking the station with the most bikes/docks with priority falling with distance away from the user-chosen start/end point. An example of this would be if station A was chosen but had too few bikes to pass the threshold then the algorithm would pick between nearby stations B, C, D, and E (in order of distance away from A) with C being chosen if it wasn't too far away and had a high number of bikes above the threshold and B had just enough to reach the threshold.
+
+-->
+
+<html>
+
+<head>
+	<style>
+		body {
+			background-color: #ddd;
+		}
+
+		* {
+			-webkit-font-smoothing: subpixel-antialiased !important;
+		}
+
+		#header {
+			background-color: #ddd;
+			color: white;
+			text-align: center;
+			padding: 5px;
+			font-size: 40px;
+			font-family: Montserrat;
+			color: #282828;
+			/*height: 70;*/
+		}
+
+		#header2 {
+			background-color: #ddd;
+			color: white;
+			text-align: center;
+			padding: 5px;
+			font-size: 24px;
+			font-family: Montserrat;
+			color: #282828;
+			/*height: 70;*/
+		}
+
+		#curr_stations {
+			background-color: #ddd;
+			color: white;
+			text-align: center;
+			padding: 5px;
+			font-size: 20px;
+			font-family: Montserrat;
+			color: #282828;
+			/*height: 70;*/
+		}
+
+		#nav, #nav-tabs {
+			line-height: 30px;
+			width: 100%;
+			padding: 5px;
+			font-family: Montserrat;
+			text-align: center;
+			font-size: 20px;
+			font-weight: lighter;
+			color: #282828;
+			background-color: #ddd;
+			float: center;
+		}
+
+		#wrapper {
+			width: 99%x;
+			padding: 10px;
+			font-family: Montserrat;
+			text-align: center;
+			font-size: 20px;
+			font-weight: lighter;
+			color: #282828;
+		}
+
+		#map_canvas {
+			width: 99%;
+			padding: 10px;
+			font-family: Montserrat;
+			text-align: center;
+			font-size: 20px;
+			font-weight: lighter;
+			color: #282828;
+			float: left;
+			/*margin: 0 auto; 	 	 */
+		}
+
+		#directions {
+			width: 99%;
+			/*height: 55%;*/
+			padding: 10px;
+			color: #282828;
+			float: left;
+			background-color: #ddd;
+		}
+		
+		#info_buttons {
+			background-color: #3138cd;
+			border-color: #000;
+			border-width: 2px;
+			/*border-color: #cf1515;*/
+			color: #fff;
+		}
+		.grey {
+			background-color: #ddd;
+		}
+
+		/*input,
+		select,
+		button {
+			text-align: center;
+			font-size: 20px;
+			font-family: Montserrat;
+			font-weight: lighter;
+		}*/
+
+		/*#start_station_prediction {
+			text-align: center;
+			font-size: 20px;
+			font-family: Montserrat;
+			font-weight: lighter;
+		}*/
+
+		path {
+			stroke-width: 2;
+			fill: none;
+		}
+
+		.label {
+			fill: #282828;
+			font-family: Montserrat;
+		}
+
+	</style>
+	<link href="data:image/x-icon;base64,AAABAAEAEBAAAAAAAABoBQAAFgAAACgAAAAQAAAAIAAAAAEACAAAAAAAAAEAAAAAAAAAAAAAAAEAAAAAAAD6l5gA/NrcAPpUVAA+Ec8A90lKAPAkLgD++fkA/IaGAPk8PQBkM8kAEAHuABQC6wD7vsAA8djjAP39/wD7ursA+EdIAP79/wA/Es0AxAM7AP75+gD6nJwAOQzOAPkGBwCodMYA+kVGAPzh4wCodskA+RESAPhDRAD6c3MApnTHABEC7QAPAfAA+hwdAPoPEAB9ScYA/v7+AP33+QD819cAwgM9APnDxQD77O8ANwzQAPoNDgCndMgA+wABAP3v7wD8AAEAAAD9AAEA/QD8u7sA/v7/AD0S0AD7CwwAjV/LAPzz9QD7sLEA+hQUAPvs8AD82dsA/fz9APqfnwD7CQoAAAD+AP34+AD85OYA+6qqAPudnQD4iYsA+wcIAP38/gD73NwA++LkAMABPQBiKcEAFwLoAPsoKAD9+vwA/vT0ADwOzQD84OIA+9zdAPZ/fwD6EBEA+wMEAP7//wD6XF0A////AP34+gCRXsgA+Y6PAGYzxwD77fAA+83OAPsBAgD+/f0AjVvJAPrc3gD7Y2MAkl/GAPqoqgBCFM4AOAvPABUC6gD7iIgA+UtMAPuxsgB8SMYA+9rcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJi0DZ2E7EREROClaUGYbWRgyQEBAJA4REWsTMUBAMh8SQEBAQExJERE5SkBAQEA1FkBAQEAgYhFOU0pAQEBAK2QxQEBACUcRWwQoQEBAQDcqJAsKSw0RbRxFBVwhaGxdEREaPGA0EWodZQhHAVERERERQg89JSU+VCwIEREREREREQwiTURWWF4jEBERERERNDQ0FAAXJ2NGOlI0NDQ0NFhYWFhILlVfLkNYWFhYWFhYWFhYQQJVMFdWWFhYWFhYWFhYJRk2FR4vWFhYWFhYWFhYWAY/MGlYWFhYWFhYWFhYWFhYMwdPWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	rel="icon" type="image/x-icon" />
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+	<link href="https://fonts.googleapis.com/css?family=Lato:100,300,400,700,900" rel="stylesheet" type="text/css">
+	<link href='https://fonts.googleapis.com/css?family=Montserrat:400,700' rel='stylesheet' type='text/css'>
+	<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+	<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+	<title>Capital Bikeshare Route Planner</title>
+	<script src="https://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+	<script type="text/javascript" src="https://maps.google.com/maps/api/js?key=AIzaSyCqydE6kJaWMwv4HH9y-d1M9BICJ7Xqkug&v=3.25"></script>
+<!-- 	<script type="text/javascript" src="https://maps.google.com/maps/api/js?v=3.25"></script> -->
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+	<!-- <script src="https://code.jquery.com/jquery-2.1.4.js" integrity="sha256-siFczlgw4jULnUICcdm9gjQPZkw/YPDqhQ9+nAOScE4=" crossorigin="anonymous"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.js"></script>
+  	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.13/moment-timezone-with-data.js"></script>
+</head>
+
+<body onload="initialize()" class="grey">
+  <!-- Add header text, dropdown menus, and buttons -->
+	<div id="header">Capital Bikeshare Route Planner</div>
+	<br>
+	<div id="header2">A tool to find the best start, end, and waypoint stations for your route based on historical usage data.
+		<br>
+		For details please see my <a href="https://github.com/molecularswords/molecularswords.github.io">github</a>.
+	</div>
+	<br>
+
+	<div id="nav" class="grey">
+	  	<ul class="nav nav-tabs nav-justified" >
+		    <li class="active"><a data-toggle="tab" href="#Map_part">Map and Directions</a></li>
+		    <li><a data-toggle="tab" href="#Introduction">Introduction</a></li>
+		    <li><a data-toggle="tab" href="#Purpose">Purpose</a></li>
+		    <li><a data-toggle="tab" href="#Visualizations">Visualizations</a></li>
+		    <li><a data-toggle="tab" href="#Data_analysis">Data Analysis</a></li>
+		    <li><a data-toggle="tab" href="#Disclaimer">Disclaimer</a></li>
+	  	</ul>
+	  	<div class="tab-content">
+	    	<div id="Map_part" class="tab-pane fade in active">
+	  
+				  <!-- Div containing the map -->
+				<div id="Map_part" class="collapse in">
+					<div id="curr_stations" class="grey">Please select a start station (red) with a short click and an end station (blue) with a long click then <b>press the get route button twice</b> (wait until the map updates between presses). Scroll down to see the directions.</div>
+				  	<div id='start_station' style="display:inline-block; width: 300px; height: 38px; border: 5px solid #cf1515; margin: 3px;">
+				  		<select id="start_station_list" style="float: left; width: 185px;" onchange="clearMarkers();setStart(this.value);"></select>
+				  		<div id='start_station_prediction' style='float: left; width: 100;'>Bikes:  </div>
+				  	</div>
+				  	<div id='end_station' style="display:inline-block; width: 300px; height: 38px; border: 5px solid #3138cd; margin: 3px;">
+				  		<select id="end_station_list" style="float: left; width: 185px;" onchange="clearMarkers();setEnd(this.value);"></select>
+				  		<div id='end_station_prediction' style='float: left; width: 100;'>Docks:  </div>
+				  	</div>
+				  	<div id='prediction_time' style="display:inline-block; width: 300px; height: 38px; border: 5px solid #ddd; margin: 3px;">
+				  		<select id="time_to_predict" style="float: left;width: 290px;"></select>
+				  	</div>
+				  	<div id='plan_route' style="display:inline-block; width: 130px; height: 38px; border: 0px solid #000;">
+						<input id="get_route_button" style="float: left;" type="button" value="Plan route" onclick="updateTime();id2marker();getTime(start_id, end_id);calcRoute(start_id, end_id);" />
+					</div>
+
+				    <div id="Map">
+						<div id="map_canvas" style="height: 55%;">
+				      		<!-- Script to generate the map, stations, and directions -->
+							<script type="text/javascript">
+							
+						    	// Instantiate variables
+								var markers = {}; // array containing all the map markers
+								var stations = {}; // array containing the bike/dock availability data for stations
+								var current_start; // start point
+								var current_end; // end point
+								var current_start_lat; // start point latitude
+								var current_start_lng; // start point longitude
+								var current_end_lat; // end point latitude
+								var current_end_lng; // end point longitude
+								var start_id; // start station identifier
+								var end_id; // end station identifier
+								var note1 = ''; // note used for notifying of an optimized station
+								var note2 = ''; // second part of note used for notifying of an optimized station
+								var note3 = 'Please select a start station (red) with a short click and an end station (blue) with a long click then <b>press the get route button twice</b> (wait until the map updates between presses). Scroll down to see the directions.'; // default note for station optimization text
+
+				        		// url pieces to use for marker icons and colors
+								var url_norm = "https://chart.googleapis.com/chart?chst=d_map_spin&chld=0.4|0|";
+								var url_big = "https://chart.googleapis.com/chart?chst=d_map_spin&chld=0.8|0|";
+								var url_middle = "|12|b|";
+
+				        		// variables for the Google maps direction service and the directions display container
+								var directionsServiceInit; // initial directions service variable used to find the trip time without waypoints
+								var directionsService; // directions service to use with waypoints
+								var directionsDisplay; // directions display container variable
+								var map; // the Google map
+
+								var station_locations;
+
+								var time_to_predict = '';
+								var start_station_to_predict = ''
+								var end_station_to_predict = ''
+
+								var start_station_predicted;
+							    var start_station_bikes;
+							    var start_station_docks;
+							    var end_station_predicted;
+							    var end_station_bikes;
+							    var end_station_docks;
+								var temp_station_predicted;
+							    var temp_station_bikes;
+							    var temp_station_docks;
+
+				        		// function to initialize map, populate map with markers, and populate drop downs with stations/time/etc
+								function initialize() {
+									// Function to get station locations
+								    function getStationLocations(input) {
+									    $.ajax({
+									        type: "POST",
+									        url: "/station_locations",
+									        data: { mydata_stat_locs: input },
+									        success: getStationLocationsCallbackFunc
+									    });
+									} // end getStationLocations
+
+									function getStationLocationsCallbackFunc(response) {
+										// The async callback function to do work with the response from getStationLocations
+									    station_locations = response;
+									    console.log(response);
+									    for (var key in station_locations) {
+										    // skip loop if the property is from prototype
+										    if (!station_locations.hasOwnProperty(key)) continue;
+
+										    var obj = station_locations;
+										    var prop = key;
+
+									        var current_color = "#fff"; // set the current color for a marker to white
+											// generate the current marker icon url
+											var url_current = String(url_norm.concat(current_color.slice(1, current_color.length), url_middle));
+											// generate the current marker icon
+											var image = new google.maps.MarkerImage(url_current);
+											// find the current marker coordinates
+											var latlng = new google.maps.LatLng(obj[prop].lat, obj[prop].lng);
+
+					          				// add the current station name to the stations array at the index equal to the station id. this allows selecting the station name by id without the need for any extra links between the two features.
+											var station = obj[prop].name;
+											var station_id = prop;
+											stations[station_id] = station;
+
+					          				// generate a marker using the current marker and station data
+											var marker = new google.maps.Marker({
+												title: String(station),
+												icon: image,
+												position: latlng,
+												map: map,
+												id: station_id,
+												index: station_id,
+												lat: obj[prop].lat,
+												lng: obj[prop].lng,
+												capacity: obj[prop].capacity
+											});
+
+					          				// add the current marker object to the markers array at the index equal to the station id. this allows selecting the marker object by station id without the need for any extra links between the two features.
+											markers[station_id] = marker;
+
+					          				// add a listener to the google map that recognizes right click and 1) changes the marker color to blue and size to bigger than normal as well as resetting the colors and sizes of any waypoints, 2) gathers that marker's associated station id and updates the end station dropdown with the station name, 3) redefines the current_end_lat and lng for use in the waypoint picking algorithm, 4) and updates the end station linegraph to display the historical docks data for the end station
+											var longpress = false;
+
+										    google.maps.event.addListener(marker,'click', function (event) {
+									            if (longpress) {
+									            	setEnd(this.id);
+											    	document.getElementById('curr_stations').innerHTML = note3;
+									            } else {
+									            	setStart(this.id);
+											    	document.getElementById('curr_stations').innerHTML = note3;
+									            }
+										    });
+
+										    google.maps.event.addListener(marker, 'mousedown', function(event){
+												start = new Date().getTime();           
+										    });
+
+										    google.maps.event.addListener(marker, 'mouseup', function(event){
+												end = new Date().getTime();
+										        longpress = (end - start < 500) ? false : true;
+										    });
+
+						  					startBox.options.add(new Option(obj[prop].name, prop, 0));
+						  					endBox.options.add(new Option(obj[prop].name, prop, 0));
+										} // end for loop
+									} // end getStationLocationsCallbackFunc
+
+									// Add options to time dropdown box
+									for (i = 0; i < 7; i++) {
+										var pred_x = document.getElementById("time_to_predict");
+										var pred_option = document.createElement("option");
+										pred_option.text = (i*10).toString()+' minutes from now';
+										pred_option.value = i*10;
+										pred_x.add(pred_option, pred_x[i]);
+									}
+
+									// Set up map
+									var centerlatlng = new google.maps.LatLng(38.896960, -77.004930); // variable to define the center of the map
+									// map options
+									var myOptions = {
+										zoom: 11,
+										center: centerlatlng,
+										mapTypeId: google.maps.MapTypeId.ROADMAP
+									};
+
+				          			// initialization of Google maps directions services
+									directionsServiceInit = new google.maps.DirectionsService();
+									directionsService = new google.maps.DirectionsService();
+
+				          			// map rendering options
+									var rendererOptions = {
+										suppressMarkers: true,
+										panel: directions,
+										suppressBicyclingLayer: true,
+										draggable: true
+									}
+									
+									// initialization of Google maps directions renderer
+									directionsDisplay = new google.maps.DirectionsRenderer(rendererOptions);
+
+				          			// initialization of the Google map
+									map = new google.maps.Map(document.getElementById("map_canvas"), myOptions);
+
+				          			// linking the Google maps directions display to the map
+									directionsDisplay.setMap(map);
+
+				          			// define start and end stations outside of range of station values to start with
+									current_start = -1;
+									current_end = -1;
+
+									// Populate station dropdown boxes
+					  				startBox = document.getElementById('start_station_list');
+					  				endBox = document.getElementById('end_station_list');
+					  
+					  				startBox.options.add(new Option('Start station'));
+					  				endBox.options.add(new Option('End station'));
+
+					  				// This part sends the data to the python script
+							        // Result is a json like so {'station_id': {'lat': YY.YYYYY, 'lng': XX.XXXXX}, ...}
+							        getStationLocations('');
+								} // end initialize function
+
+								// Make function to update the time upon submission
+								function updateTime() {
+									// Get time to predict
+								    var pred_time_offset = document.getElementById("time_to_predict").value;
+								    var pred_date = new moment().tz('America/New_York');
+								    var pred_min_tens = pred_date.minutes() % 10;
+								    pred_date = pred_date.subtract(pred_min_tens, "minutes").add(pred_time_offset, "minutes")
+								    var pred_str = pred_date.format('YYYY-MM-DD HH:mm')
+								    console.log(pred_str)
+								    time_to_predict = pred_str;
+								    // Get station to predict
+								    start_station_to_predict = document.getElementById("start_station_list").value;
+								    end_station_to_predict = document.getElementById("end_station_list").value;
+								}
+
+							    ////////////////////// SYNC MYSQL PART ///////////////////////
+							    function getMySQLData(input) {
+							    	/// input should be in the format <time>___<station>___<start, end, or waypoint>
+								    var jqXHR = $.ajax({
+								        type: "POST",
+								        url: "/prediction",
+								        data: { mydata: input },
+								        async: false
+								    });
+								    return jqXHR.responseText;
+								} // end getMySQLData
+								
+								// Set the current url for the marker images
+								var current_color = "#fff";
+								var url_current = String(url_norm.concat(current_color.slice(1, current_color.length), url_middle));
+								
+								// function to set the start station marker and variables
+								function setStart(start) {
+									clearMarkers();
+
+								  	var start_color = "#cf1515";
+									var url_start = String(url_norm.concat(start_color.slice(1, start_color.length), url_middle));
+									var start_image = new google.maps.MarkerImage(url_start);
+
+									markers[start].setIcon(String(url_big.concat(start_color.slice(1, start_color.length), url_middle)))
+
+									if (current_start == -1) {
+										markers[start].setIcon(String(url_big.concat(start_color.slice(1, start_color.length), url_middle)));
+										current_start = markers[start].id;
+										current_start_lat = markers[start].lat;
+										current_start_lng = markers[start].lng;
+									} else if (current_start != markers[start].id) {
+										markers[current_start].setIcon(url_current);
+										markers[start].setIcon(String(url_big.concat(start_color.slice(1, start_color.length), url_middle)));
+										current_start = markers[start].id;
+										current_start_lat = markers[start].lat;
+										current_start_lng = markers[start].lng;
+									}
+									
+									start_id = markers[start].id;
+									startBox.value = start_id;
+								}
+									
+								// function to set the end station marker and variables
+								function setEnd(end) {
+								  clearMarkers();
+								  
+								  var end_color = "#3138cd";
+									var url_end = String(url_norm.concat(end_color.slice(1, end_color.length), url_middle));
+									var end_image = new google.maps.MarkerImage(url_end);
+									
+									markers[end].setIcon(String(url_big.concat(end_color.slice(1, end_color.length), url_middle)))
+									
+									if (current_end == -1) {
+										markers[end].setIcon(String(url_big.concat(end_color.slice(1, end_color.length), url_middle)));
+										current_end = markers[end].id;
+										current_end_lat = markers[end].lat;
+										current_end_lng = markers[end].lng;
+									} else if (current_end != markers[end].id) {
+										markers[current_end].setIcon(url_current);
+										markers[end].setIcon(String(url_big.concat(end_color.slice(1, end_color.length), url_middle)));
+										current_end = markers[end].id;
+										current_end_lat = markers[end].lat;
+										current_end_lng = markers[end].lng;
+									}
+									
+									end_id = markers[end].id;
+									endBox.value = end_id;
+								}
+				            
+					            var wp_markers = []; // array housing the waypoints (like markers array but for waypoints)
+					            var waypts = []; // array housing dicts containg waypoint coordinates for use as data for the waypoint field in directions service options
+					            var time_cutoff_secs = 1260; // the number of seconds traveled along a route before the waypoint finder algorithm will decide to pick a waypoint
+					            
+					            // function to reset waypoint markers to white and normal size
+					            function clearMarkers() {
+					            	white_color = "#fff";
+					            	for (i = 0; i < wp_markers.length; i++){
+					    				wp_markers[i].setIcon(String(url_norm.concat(white_color.slice(1, white_color.length), url_middle)))
+					    			};
+					    			wp_markers = [];
+					            }
+					    
+					            // function to find the 10 nearest neighbors as markers when given a latitude and longitude. Takes in coords close to where a waypoint needs to be, finds the 10 nearest neighbors, and returns the marker indices for those stations.
+					            function knn(lat_w,lng_w){
+									var dists = new Array(markers.length);
+									for (var ind in markers){
+										var obj = {"value": -1, "index": -1, "id": -1};
+										var temp_lat_diff = markers[ind].lat - lat_w; // find the difference between the current marker latitude and the given latitude
+										var temp_lng_diff = markers[ind].lng - lng_w; // find the difference between the current marker longitude and the given longitude
+										var d = Math.sqrt(temp_lat_diff*temp_lat_diff + temp_lng_diff*temp_lng_diff) // find the euclidean distance between the marker and the given point
+										obj.value = d; // the distance between current waypoint and given point
+										obj.index = ind; // the index of the current marker
+										obj.id = markers[ind].id; // the id of the current marker
+										dists[ind] = obj; // add the data to the dists container
+									}
+									// this function sorts the marker data within the dists container by the distance of each marker away from the given point
+									dists.sort(function(a,b){
+									    if(a.value == b.value)
+								        	return 0;
+									    if(a.value < b.value)
+								        	return -1;
+									    if(a.value > b.value)
+								        	return 1;
+									});
+									return dists.slice(0,10);
+								}
+					    				
+								// here I can have a function that takes in a lat lng pair and picks the best nearby station based on bike/dock availability and distance from the current step coordinates. It will also take in the type of station that is being queried in order to pick the correct algorithm based on the situation (start station, waypoint, or end station). The type variable should be "start", "waypoint", or "end".
+								function stationOptimizer(lat_so, lng_so, type) {
+									var bikes_available;
+									var docks_available;
+									if (type == 'start') {
+										var start_stat = knn(lat_so, lng_so);
+										var best_stat = -1;
+										for (var abc = 0; abc < start_stat.length; abc++) {
+											var data_for_MySQL = time_to_predict.toString()+'___'+start_stat[abc].id.toString()+'___start'
+										    var response = JSON.parse(getMySQLData(data_for_MySQL));
+										    bikes_available = parseInt(response['prediction']);
+										    docks_available = markers[start_stat[abc].id].capacity - bikes_available;
+											console.log(bikes_available, "bikes available for start index", abc)
+											if (bikes_available >= 2) {
+											    best_stat = abc;
+											    break;
+											}
+										}
+										if (best_stat == -1) {
+										    // console.log("No start stations near original start with enough bikes. Using the original start.")
+										    return start_stat[0].id
+										} else {
+											if (bikes_available > 5) {
+												document.getElementById("start_station_prediction").innerHTML = 'Bikes: >5';
+											} else {
+												document.getElementById("start_station_prediction").innerHTML = 'Bikes: '+bikes_available.toString();
+											}
+										    return start_stat[best_stat].id
+										}
+									} else if (type == 'end') {
+										var end_stat = knn(lat_so, lng_so);
+										var best_stat = -1;
+										for (var abc = 0; abc < end_stat.length; abc++) {
+											var data_for_MySQL = time_to_predict.toString()+'___'+end_stat[abc].id.toString()+'___end'
+										    var response = JSON.parse(getMySQLData(data_for_MySQL));
+										    bikes_available = parseInt(response['prediction']);
+										    docks_available = markers[end_stat[abc].id].capacity - bikes_available;
+											console.log(docks_available, "docks available for end index", abc)
+											if (docks_available >= 2) {
+											    best_stat = abc;
+											    break;
+											}
+										}
+										if (best_stat == -1) {
+										    // console.log("No end stations near original end with enough docks. Using the original end.")
+										    return end_stat[0].id
+										} else {
+											if (docks_available > 5) {
+												document.getElementById("end_station_prediction").innerHTML = 'Docks: >5';
+											} else {
+												document.getElementById("end_station_prediction").innerHTML = 'Docks: '+docks_available.toString();
+											}
+										  	return end_stat[best_stat].id
+										}
+									} else if (type == 'waypoint') {
+										var wp_stat = knn(lat_so, lng_so);
+										var best_stat = -1;
+										for (var abc = 0; abc < wp_stat.length; abc++) {
+											var data_for_MySQL = time_to_predict.toString()+'___'+wp_stat[abc].id.toString()+'___other'
+										    var response = JSON.parse(getMySQLData(data_for_MySQL));
+										    bikes_available = parseInt(response['prediction']);
+										    docks_available = markers[wp_stat[abc].id].capacity - bikes_available;
+											console.log(bikes_available, "bikes and",docks_available,"available for waypoint index", abc)
+											if (bikes_available >= 2 & docks_available >= 2) {
+											    best_stat = abc;
+											    break;
+											}
+										}
+										if (best_stat == -1) {
+										    // console.log("No waypoint stations near original waypoint with enough bikes/docks. Using the original waypoint.")
+										    return wp_stat[0].id
+										} else {
+										    return wp_stat[best_stat].id
+										}
+									}
+								}
+				            
+					            // this function finds which waypoint from a list of 10 closest waypoints to a given location along a route will fit best within the time limits imposed for legs of trips. It takes in the lats and lngs of two subsequent route steps and minimizes the aggregate distance between the distances between the first step and the waypoint and the distance between the waypoint and the second step.
+					            function setWaypoint(lat1, lng1, lat2, lng2) {
+									test = knn(lat1, lng1);  /* Finds the 10 nearest stations to the waypoint */
+									
+									// Here I need to minimize the aggregate distance between the first and second latlng pairs
+									var temp_min_dist_list = [];
+									var min_dist_ind; // the index of the waypoint
+									var min_dist = -1; // the distance value of the waypoint
+									var temp_min_dist_lat1 = 0; // lat of current step
+									var temp_min_dist_lng1 = 0; // lng of current step
+									var temp_min_dist_lat2 = 0; // lat of next step
+									var temp_min_dist_lng2 = 0; // lng of next step
+									// loop through closest 10 waypoints to current step coords
+									for (z = 0; z < test.length; z++) {
+									    temp_min_dist_lat1 = lat1 - markers[test[z].id].position.lat(); // find dist between current step lat and marker lat
+									    temp_min_dist_lng1 = lng1 - markers[test[z].id].position.lng(); // find dist between current step lng and marker lng
+									    temp_min_dist_lat2 = markers[test[z].id].position.lat() - lat2; // find dist between next step lat and marker lat
+									    temp_min_dist_lng2 = markers[test[z].id].position.lng() - lng2; // find dist between next step lng and marker lng
+									    // pythag to get euclidean distances between marker and each step coord
+									    temp_min_dist_1 = Math.sqrt(Math.pow(temp_min_dist_lat1, 2) + Math.pow(temp_min_dist_lng1, 2));
+									    temp_min_dist_2 = Math.sqrt(Math.pow(temp_min_dist_lat2, 2) + Math.pow(temp_min_dist_lng2, 2));
+									    temp_min_dist = temp_min_dist_1 + temp_min_dist_2; // find the aggregate distance between the steps and the marker
+									    temp_min_dist_list.push([z, temp_min_dist]);
+									  
+									    if (min_dist == -1) {
+									    	min_dist = temp_min_dist;
+									    	min_dist_ind = z;
+									    } else if (temp_min_dist < min_dist) { // check to see if the current distance between steps and marker is less than the smallest distance found so far and if so then redefine the latter value to the former as well as the index
+										    min_dist = temp_min_dist;
+										    min_dist_ind = z;
+									    }
+									    console.log("min_dist and min_dist_ind", min_dist, min_dist_ind)
+									}
+									
+									wp_test = stationOptimizer(markers[test[min_dist_ind].id].position.lat(), markers[test[min_dist_ind].id].position.lng(), 'waypoint');
+									// console.log("wp_test", wp_test, "original wp id", test[min_dist_ind].id)
+									if (wp_test != test[min_dist_ind].id) {
+									    function cmp(a, b) {
+				                  			return a[1] - b[1];
+				                		}
+						                temp_min_dist_list.sort(cmp);
+						                // console.log("WAYPOINT OPTIMIZER WORKED")
+						                // console.log("ORIGINAL WWAYPOINT:", markers[test[min_dist_ind].id].title)
+						                // console.log("NEW WAYPOINT:", markers[wp_test].title)
+						                var wp_coords = markers[wp_test].position; // get the coords for the waypoint with the minimum
+						                var wp_marker = markers[wp_test];
+					    			} else {
+					    				var wp_coords = markers[test[min_dist_ind].id].position; // get the coords for the waypoint with the minimum
+					    				var wp_marker = markers[test[min_dist_ind].id];
+					    			}
+					    
+					                waypoint = {
+						                location: wp_coords,
+						                stopover: true
+					              	};
+				              		// return the waypoint data and the marker id for the waypoint
+				    				return [waypoint, wp_marker]
+				    			}
+				    				
+			    				// Here I need to figure out what the user clicked
+			    				var start_list = document.getElementById('start_station_list');
+			    				var end_list = document.getElementById('end_station_list');
+			    				
+			    				// function to get the station ids for the start and end stations
+			    				function id2marker() {
+			    				  	start_id = start_list[start_list.selectedIndex].value;
+			    				  	end_id = end_list[end_list.selectedIndex].value;
+			    				  	// console.log(start_id, end_id)
+			    				}
+			    				
+			    				// function to get the time required to traverse the un-waypointed route between the start and end stations. takes in station ids
+			            		function getTime(start, end) {
+			              			console.log("************** BUTTON CLICKED ***************")
+			              			// get the coords for the start and end stations
+			    				  	var start_coords = markers[start].position;
+			    				  	var end_coords = markers[end].position;
+			    				  
+			    				  	// set the data variable for the directions service request
+			    					var request = {
+			    						origin: markers[start].position,
+			    						waypoints: [],
+			                			optimizeWaypoints: true,
+			    						destination: markers[end].position,
+			    						travelMode: google.maps.TravelMode.BICYCLING
+			    					};
+			    					
+			    					directionsServiceInit.route(request, function(response, status) {
+			    						if (status == google.maps.DirectionsStatus.OK) {
+			    						  	// test optimizer function
+			    						  	first_step_lat = response.routes[0].legs[0].steps[0].start_location.lat();
+			    						  	first_step_lng = response.routes[0].legs[0].steps[0].start_location.lng();
+			    						  	last_step_lat = response.routes[0].legs[0].steps[response.routes[0].legs[0].steps.length - 1].end_location.lat();
+			    						  	last_step_lng = response.routes[0].legs[0].steps[response.routes[0].legs[0].steps.length - 1].end_location.lng();
+			    						  	var start_test = stationOptimizer(first_step_lat, first_step_lng, 'start');
+			    						  	console.log("Actual start is", markers[start_id].title, start_id)
+			                  				console.log("Optimized start is", markers[start_test].title, start_test)
+			    						  	var end_test = stationOptimizer(last_step_lat, last_step_lng, 'end');
+			                  				console.log("Actual end is", markers[end_id].title, end_id)
+			                  				console.log("Optimized end is", markers[end_test].title, end_test)
+			                  
+						                  	if ((start_id != start_test) & (end_id != end_test)) {
+						                    	setStart(start_test);
+						                    	setEnd(end_test);
+						                    	note1 = 'NOTE: YOUR START AND END STATIONS WERE AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF BIKE AND DOCK AVAILABILITY! New start station: ';
+						                    	note2 = '. New end station: ';
+						                    	document.getElementById('curr_stations').innerHTML = note1.concat(markers[start_test].title, note2, markers[end_test].title, '.');
+						                    	console.log("********** START CHANGED TO ", markers[start_test].title, start_test, "**********")
+						                    	console.log("********** END CHANGED TO ", markers[end_test].title, end_test, "**********")
+						                  	} else if (start_id != start_test) {
+							                    setStart(start_test);
+							                    note1 = 'NOTE: YOUR START STATION WAS AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF BIKE AVAILABILITY! New start station: ';
+							                    document.getElementById('curr_stations').innerHTML = note1.concat(markers[start_test].title, '.');
+							                    console.log("********** START CHANGED TO ", markers[start_test].title, start_test, "**********")
+						                  	} else if (end_id != end_test) {
+							                    setEnd(end_test);
+							                    note1 = 'NOTE: YOUR END STATION WAS AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF DOCK AVAILABILITY! New end station: ';
+							                    document.getElementById('curr_stations').innerHTML = note1.concat(markers[end_test].title, '.');
+							                    console.log("********** END CHANGED TO ", markers[end_test].title, end_test, "**********")
+						                  	}
+			                  
+			    						  	// find how long it will take in minutes to traverse the route
+			    							total_mins = Math.ceil(response.routes[0].legs[0].duration.value / 60);
+			    							var leg_time = 0;
+			    							// loop through each step and keep track of how long the trip has taken up to the current step
+			    							for (i = 0; i < (response.routes[0].legs[0].steps.length - 1); i++) {
+			    							  	leg_time = leg_time + response.routes[0].legs[0].steps[i].duration.value
+			    							  	var step_time = response.routes[0].legs[0].steps[i+1].duration.value
+			    							  	// when the next step will go over the time cutoff defined above then pick a waypoint near to the current and next steps
+			    							  	if ((leg_time + step_time) > time_cutoff_secs) {
+				    							    // FIND NEAREST STATION
+				    							    var wp_lat1 = response.routes[0].legs[0].steps[i].end_location.lat();
+				    							    var wp_lng1 = response.routes[0].legs[0].steps[i].end_location.lng();
+				    							    var wp_lat2 = response.routes[0].legs[0].steps[i+1].end_location.lat();
+				    							    var wp_lng2 = response.routes[0].legs[0].steps[i+1].end_location.lng();
+				    							    setWaypoint_data = setWaypoint(wp_lat1, wp_lng1, wp_lat2, wp_lng2);
+				    							    waypts.push(setWaypoint_data[0]); // add the waypoint data to the waypts array
+				    							    request.waypoints.push(setWaypoint_data[0]); // add the waypoint data to the directions service request data
+				    							    wp_markers.push(setWaypoint_data[1]); // add the waypoint id tot he wp_markers array
+				    							   	console.log("new waypoint", setWaypoint_data[0].location);
+				    							    console.log("new waypoint marker", setWaypoint_data[1]);
+				    							   // console.log("leg_time", leg_time);
+				    							    leg_time = 0; // reset the leg time
+			    							  	} else {
+			    							   	// console.log("leg_time", leg_time, "next step", step_time);
+			    							  	}
+			    							}
+			    						// 	console.log("legs", response.routes[0].legs[0])
+			    						}
+			    					});
+			            		} // end getTime function
+			            
+			            		// function to calculate the final route after waypoints have been generated. takes in start and end station ids
+			    				function calcRoute(start, end) {
+			    					var start_coords = markers[start].position;
+			    					var end_coords = markers[end].position;
+			    					white_color = "#fff";
+			    					grey_color = "#ccc";
+			    
+			    					var request = {
+			    						origin: markers[start].position,
+			    						waypoints: waypts,
+			                			optimizeWaypoints: true,
+			    						destination: markers[end].position,
+			    						travelMode: google.maps.TravelMode.BICYCLING
+			    					};
+			    					
+			    					// set the waypoints to grey and make them a little bigger
+			    					for (i = 0; i < wp_markers.length; i++){
+			    					  	wp_markers[i].setIcon(String(url_big.concat(grey_color.slice(1, grey_color.length), url_middle)))
+			    					};
+			    					
+			    					// get the directions with waypoints
+			    					directionsService.route(request, function(response, status) {
+			    						if (status == google.maps.DirectionsStatus.OK) {
+			    							directionsDisplay.setDirections(response);
+			    						}
+			    					});
+			    					
+			    					// 	wp_markers = [];
+			    				  	waypts = [];
+			    				}
+				    			</script>
+				    		</div>
+				    	</div>
+				  	</div>
+					<br>
+				    <div id="directions"></div>
+
+				</div>
+
+			    <div id="Introduction" class="tab-pane fade">
+			      <p>Have you ever made plans to utilize a service only to find that it was temporarily unavailabile when you went to use it? This can be especially disrupting of our lives when it comes to transportation services. A missed flight, a late bus, or excessive traffic can effectively ruin a trip since arriving on time is often of paramount importance for accomplishing the trip's purpose. Users of bikeshare networks experience this with unfortunate frequency due to the non-uniform geographical distribution of bike station usage without a compensatory increase in bikes and docks at heavily used stations. This discordance between network usage and resource allocation causes bike or dock availability to rapidly decline at certain high-volume usage stations during periods of heavy activity and can result in lost time and potential disruption of plans as the user scrambles to find a bike or a dock at other nearby stations. This tool is for all those bikeshare users in DC who have experienced this frustrating reality firsthand as well as anyone who wants to avoid it.</p>
+			    </div>
+			    <div id="Purpose" class="tab-pane fade">
+			      <p>This tool aims to provide the user with information about how to best plan their route when using the Capital Bikeshare system in Washington, D.C. It uses simple statistical models trained on historical usage data to predict the availability of bikes and docks at any given time during the week for each station within the network. The route planner utilizes these data to find the optimal route from a user-defined pair of start and end stations that will provide the user with a high probability of being able to get a bike at the start station and to dock that bike at the end station. If the user picks a station that is predicted to have few to no available bikes (for start stations) or docks (for end stations) then the route planner will automatically choose the closest station that does have adequate availability. Furthermore, if the user's trip ends up being predicted to last around 30 minutes or more then the route planner will also pick the optimal waypoints along the route so the user can switch bikes to avoid paying the fee incurred for single rides longer than 30 minutes.</p>
+			    </div>
+			    <div id="Visualizations" class="tab-pane fade">
+			      <p>Visualization of the data revealed the traffic patterns of the network as well as user behavior at a high level. The most notable insights are 1) the 8-9 am ingress to and 5-6 pm egress from the city on weekdays and 2) the similar patterns of availability between stations that cluster together. This can be seen from the following visualizations.</p>
+			      <p>Time lapse animation depicting bike availability across the network can be found <a href="animated_availability_heatmap.html">here</a>.</p>
+			      <p>Time lapse animation depicting departures and arrivals across the network can be found <a href="animated_rides.html">here</a>.</p>
+			      <p>Station clusters for weekdays can be found <a href="weekday_clusters.html">here</a>.</p>
+			      <p>Station clusters for weekends can be found <a href="weekend_clusters.html">here</a>.</p>
+			    </div>
+			    <div id="Data_analysis" class="tab-pane fade">
+			      <p>Data analysis and results can be found in the following notebooks: <a href="https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/data_wrangling.ipynb">data gathering and preparation</a>, <a href="https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/EDA.ipynb">exploratory data analysis</a>, <a href="https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/modeling_whole_system.ipynb">modeling of the whole system</a>, <a href="https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/modeling_individual_stations.ipynb">modeling of individual stations</a>, and <a href="https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/predict_availability_for_web.ipynb">making the model for the webapp</a>.</p>
+			    </div>
+			    <div id="Disclaimer" class="tab-pane fade">
+			      <p>User beware! This is an early version of the route planner, so expect to encounter bugs. Currently known bugs are 1) the need to click the "Find best route" button twice after changing the start or end location to fully update the route to use the proper number of waypoints (if any) for the new route and 2) the occasional instance for long trips where the algorithm will choose a route that has one or more legs that take longer than a comfortable travel time of around 20 minutes.</p>
+			    </div>
+
+		</div>
+	</div>
+</body>
+
+</html>

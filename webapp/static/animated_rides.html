@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<style>
+
+#main_chart {
+    position:relative;
+    width: 800px;
+}
+#dropdown {
+  position: absolute;
+  height: 25px;
+  top: 94%;
+  left: 7%;
+  font-size: 19px;
+  font-family: Helvetica;
+  text-align-last: center;
+  font-weight: bold;
+}
+#start_button {
+  width: 80px;
+  height: 25px;
+  position: absolute;
+  top: 94%;
+  left: 25%;
+  font-size: 19px;
+  font-family: Helvetica;
+  text-align-last: center;
+  font-weight: bold;
+}
+
+</style>
+
+<body>
+<div id="main_chart">
+
+    <input id="start_button" type="button" value="Go" onclick="toggleInterval(interval_toggle);" />
+
+    <select id='dropdown'/>
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.13/moment-timezone-with-data.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script>
+
+///// Import data
+
+var stations = []
+  , dataset = []
+  , starts = []
+  , ends = []
+
+var lat_start = 38.779
+  , lat_end = 39.03
+  , lng_start = -77.195
+  , lng_end = -76.87
+  , time_interval = 5
+  , base_circle_size = 4;
+
+var start_datetime;
+
+var date_range_end = moment(moment().subtract(1, 'd'));
+var date_range_start = moment(moment().subtract(7, 'd'));
+
+var date_range = [{'label': 'Choose day', 'datetime': 'Choose day', 'value': 0}];
+date_range.push({'label': date_range_start.format('MMM D'), 'datetime': date_range_start.format('YYYY-MM-DD'), 'value': 1});
+
+var date_count = 2;
+while (date_range_start < date_range_end) {
+  date_range.push({'label': date_range_start.add(1, 'd').format('MMM D'), 'datetime': date_range_start.format('YYYY-MM-DD'), 'value': date_count});
+  date_count++;
+}
+
+var day_choice = d3.select("#dropdown")
+
+day_choice.selectAll("option")
+         .data(date_range) // eg., data = [ {'value': 10}, {'value': 11}, {'value': 12} ]
+         .enter()
+         .append("option")
+         .text(function (d) { return d.label; })
+         .attr("value", function (d) { return d.value; })
+         .attr('font-size', '25px')
+
+day_choice.on("change", function(d) { 
+    start_datetime = date_range[d3.select(this).property('value')].datetime; 
+    console.log(start_datetime); 
+    count = 0; 
+    startVisualization(start_datetime); 
+    svg.selectAll("#time_of_day").remove(); 
+    toggleInterval(1); 
+});
+
+var stat_count = 0
+  , stations_to_omit = []
+  , svg
+  , xAxis
+  , xScale
+  , yAxis
+  , yScale;
+
+var width = 700
+  , height = 700
+  , margin = {top: 30, right: 50, bottom: 50, left: 50}
+  , uid = 0
+  , datasetSize = dataset.length
+  , interval_toggle = 0
+  , count = 0;
+
+// Function to get station locations
+function getStationLocations(input) {
+    $.ajax({
+        type: "POST",
+        url: "/station_locations",
+        data: { mydata_stat_locs: input },
+        success: getStationLocationsCallbackFunc
+    });
+} // end getStationLocations
+
+function getStationLocationsCallbackFunc(response) {
+    // The async callback function to do work with the response from getStationLocations
+    station_locations = response;
+    console.log(station_locations);
+    for (var key in station_locations) {
+        // skip loop if the property is from prototype
+        if (!station_locations.hasOwnProperty(key)) continue;
+
+        var obj = station_locations;
+        var prop = key;
+
+        check = 0
+        var station_id = parseInt(prop)
+          , station_lng = parseFloat(obj[prop].lng)
+          , station_lat = parseFloat(obj[prop].lat)
+          , station_radius = base_circle_size;
+        if (station_lng < lng_start || station_lng > lng_end || station_lat < lat_start || station_lat > lat_end) {
+          stations_to_omit.push(prop)
+          check = 1
+        }
+        if (check == 0) {
+          dataset.push([station_id, station_lng, station_lat, station_radius])
+          stations[station_id] = stat_count;
+          stat_count++;
+        }
+    } // end for loop
+    // [0] is uid
+    // [1] will be plotted on the x axis (lng)
+    // [2] will be plotted on the y axis (lat)
+    // [3] will be used as the radius
+
+    // set up the scales
+    xScale = d3.scale.linear()
+          .range([0, width])
+          .domain([lng_start, lng_end]);
+
+    yScale = d3.scale.linear()
+          .range([height, 0])
+          .domain([lat_start, lat_end]);
+
+    // set the axes
+    xAxis = d3.svg.axis()
+      .scale(xScale)
+      .orient('bottom')
+      .outerTickSize(1);
+
+    yAxis = d3.svg.axis()
+      .scale(yScale)
+      .orient('left')
+      .outerTickSize(1);
+
+    // append the svg to the body of the page and set the width and height
+    // append a 'g' element to group the circles together and 'translate'
+    svg = d3.select("#main_chart").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    svg.append("defs")
+        .append("pattern")
+        .attr("id", "venus")
+        .attr('patternUnits', 'userSpaceOnUse')
+        .attr("width", width)
+        .attr("height", height)
+        .append("image")
+        .attr("xlink:href", 'figures/dc_map_upright.png')
+        .attr("width", width)
+        .attr("height", height);
+
+    svg.append("rect")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("fill", "url(#venus)")
+        .attr('stroke', 'black')
+
+    svg.selectAll("circle")
+        .data(dataset)
+        .enter()
+        .append("circle")  // Add circle svg
+        .style('opacity', 0.6)
+        .style("fill", "steelblue")
+        .style('stroke', 'black')
+        .attr({
+            "cx": function(d) { return xScale(d[1]); },
+            "cy": function(d) { return yScale(d[2]); },
+            "r": function(d) { return d[3]; }
+        });
+
+    svg.selectAll("text").remove()
+    
+    svg.append("text")
+      .attr('id', 'title')
+      .attr('x', width / 2)
+      .attr("y", -10)
+      .attr("text-anchor", "middle")  
+      .style("font-size", "25px")
+      .style('font-weight', 'bold')
+      .style('font-family', 'helvetica')
+      .text('Departures and arrivals over time');
+
+    // legend
+    svg.append("circle")
+      .attr("r", 10)
+      .attr('cx', width * 0.68)
+      .attr('cy', height * 1.029)
+      .style("fill", 'tomato');
+
+    svg.append("circle")
+      .attr("r", 10)
+      .attr('cx', width * 0.875)
+      .attr('cy', height * 1.029)
+      .style("fill", 'darkorchid');
+
+    svg.append("text")
+      .attr('id', 'legend')
+      .attr('x', width *0.77)
+      .attr("y", height*1.038)
+      .attr("text-anchor", "middle")  
+      .style("font-size", "20px")
+      .style('font-weight', 'bold')
+      .style('font-family', 'helvetica')
+      .text('Departure');
+
+    svg.append("text")
+      .attr('id', 'legend')
+      .attr('x', width *0.945)
+      .attr("y", height*1.038)
+      .attr("text-anchor", "middle")  
+      .style("font-size", "20px")
+      .style('font-weight', 'bold')
+      .style('font-family', 'helvetica')
+      .text('Arrival');
+
+    startVisualization();
+} // end getStationLocationsCallbackFunc
+
+getStationLocations('');
+
+function startVisualization(start_datetime) {
+
+    starts = []
+    ends = []
+
+    ////////////////////// SYNC MYSQL PART ///////////////////////
+    function getMySQLData(input) {
+        /// input should be in the format 'YYYY-MM-DD'
+        $.ajax({
+            type: "POST",
+            url: "/dots_ping",
+            data: { mydata: input },
+            success: getMySQLDataCallBackFunc
+        });
+    } // end getMySQLData
+
+    function getMySQLDataCallBackFunc(response) {
+      var data1 = response;
+      console.log(data1)
+
+      //////// Data example //////////////
+      // {"YYYY-MM-DD HH:mm": {'dep': {'station_1': num_departures_1, 'station_2': num_departures_2}, 'arr': {'station_1': num_departures_1, 'station_2': num_departures_2}}}
+
+      // Make it to where the rides data are gathered from mongodb given a start and end datetime range
+      var animated_rides_start = moment(new Date(start_datetime+' 03:00')).tz('America/New_York');
+      var animated_rides_end = moment(animated_rides_start.add(1, 'd')).tz('America/New_York');
+
+      animated_rides_end = animated_rides_end.subtract(time_interval, 'm');
+      animated_rides_start = animated_rides_start.subtract(1, 'd');
+
+      var time_list = [animated_rides_start.format('YYYY-MM-DD HH:mm')];
+
+      while (animated_rides_start < animated_rides_end) {
+        time_list.push(animated_rides_start.add(time_interval, 'm').format('YYYY-MM-DD HH:mm'));
+      }
+
+      for (var i = 0; i < time_list.length; i++) {
+
+        if(data1.hasOwnProperty(time_list[i])){
+
+          var curr_deps = data1[time_list[i]]['dep'];
+          var curr_arrs = data1[time_list[i]]['arr'];
+
+          for (var key in curr_deps) {
+            if (curr_deps.hasOwnProperty(key) && stations_to_omit.indexOf(key) < 0) {
+              var station_id = key;
+              var num_rides = Math.abs(curr_deps[key]);
+              if (typeof starts[i] == 'undefined') {
+                starts.push([[station_id], [num_rides]]);
+              } else {
+                starts[i][0].push(station_id);
+                starts[i][1].push(num_rides);
+              }
+            }
+          }
+
+          for (var key in curr_arrs) {
+            if (curr_arrs.hasOwnProperty(key) && stations_to_omit.indexOf(key) < 0) {
+              var station_id = key;
+              var num_rides = curr_arrs[key];
+              if (typeof ends[i] == 'undefined') {
+                ends.push([[station_id], [num_rides]]);
+              } else {
+                ends[i][0].push(station_id);
+                ends[i][1].push(num_rides);
+              }
+            }
+          }
+        } else {
+          continue
+        }
+      } // end for loop
+    } // end getMySQLDataCallBackFunc
+    getMySQLData(start_datetime)
+} // end startVisualization
+
+var newInterval
+var circleGroup
+
+// function newDate() {
+//   for (i = 0; i < 1440/time_interval; i++) {
+//     svg.selectAll('.ring'+count.toString()).remove();
+//   }
+//   svg.selectAll('.speedlines').remove();
+//   svg.selectAll('.circles').remove();
+// }
+
+var transition_time = 175;
+
+newInterval = setInterval(makeRings, transition_time);
+
+function toggleInterval(value) {
+  if (value == 1) {
+    interval_toggle = 0;
+    console.log('Visualization paused.')
+    if (count == 0) {
+      svg.selectAll('.speedlines').remove();
+    }
+    d3.selectAll('#start_button').transition().attr('value', 'Go')
+  } else {
+    console.log('Visualization started.')
+    interval_toggle = 1;
+    d3.selectAll('#start_button').transition().attr('value', 'Pause')
+  }
+}
+
+function makeRings() {
+
+  if (interval_toggle == 0) {
+    empty_var = 'bleh'
+  } else {
+
+    if (starts.length > 0 | ends.length > 0) {
+
+      function getTime(mins) {
+
+        var am_pm = 'AM'
+          , hours = Math.floor(mins*time_interval / 60) + 3
+          , minutes = (mins*time_interval % 60);
+
+        if (hours >= 12) {
+          if (am_pm == 'AM') {
+            am_pm = 'PM';
+          } else {
+            am_pm = 'AM';
+          }
+        }
+
+        if (hours >= 24) {
+          am_pm = 'AM';
+        }
+
+        if (hours == 0) {
+          hours = (12).toString();
+        } 
+
+        while (hours > 12) {
+          hours = hours - 12;
+        }
+
+        hours = hours.toString();
+
+        if (minutes < 10) {
+          minutes = '0' + minutes.toString();
+        } else {
+          minutes = minutes.toString();
+        }
+
+        return hours+':'+minutes+' '+am_pm;
+
+      }
+
+      // Make a time display
+
+      svg.selectAll("#time_of_day").remove()
+      svg.append("text")
+        .attr('id', 'time_of_day') 
+        .attr('x', width * 0.5)
+        .attr("y", height * 1.04)
+        .attr("text-anchor", "middle")  
+        .style("font-size", "25px")
+        .style('font-weight', 'bold')
+        .style('font-family', 'helvetica')
+        .text(getTime(count));
+
+      // Get rides that correspond to the count variable (representing the minute of the day)
+      var start_station_ids = []
+        , end_station_ids = []
+        , start_station_nums = []
+        , end_station_nums = [];
+
+      if (typeof starts[count] != 'undefined') {
+        start_station_ids = starts[count][0];
+        start_station_nums = starts[count][1];
+      }
+      if (typeof ends[count] != 'undefined') {
+        end_station_ids = ends[count][0];
+        end_station_nums = ends[count][1];
+      }
+
+      if (start_station_ids.length + end_station_ids.length > 0) {
+
+        var station_data = [];
+
+        if (start_station_ids.length > 0) {
+
+          for (i = 0; i < start_station_ids.length; i++) {
+
+            // console.log(stations[start_station_ids[i]], start_station_ids[i])
+
+            station_data.push([start_station_ids[i], dataset[stations[start_station_ids[i]]][1], 
+                               dataset[stations[start_station_ids[i]]][2], start_station_nums[i] * base_circle_size*2, 'tomato']);
+
+          }
+        } // end if
+
+        if (end_station_ids.length > 0) {
+
+          for (i = 0; i < end_station_ids.length; i++) {
+            // console.log(end_station_ids[i], stations[end_station_ids[i]])
+
+            station_data.push([end_station_ids[i], dataset[stations[end_station_ids[i]]][1], 
+                               dataset[stations[end_station_ids[i]]][2], end_station_nums[i] * base_circle_size*2, 'darkorchid']);
+
+          }
+
+        } // end if
+
+        function myTransition(circleData){
+
+          radius = circleData[3];
+          // if (circleData[3] > 30){
+          //   radius = 30;
+          // } else {
+          //   radius = circleData[3];
+          // }
+
+          if (count == 0) {
+            console.log('IT IS HAPPENING');
+          }
+
+          var ping_size = base_circle_size + radius*0.15;
+
+          var speedLineGroup = svg.append("g")
+                              .attr("class", "speedlines");
+
+          speedLineGroup.append("circle")
+          .attr({
+              "class": "ring"+count.toString(),
+              "fill": circleData[4],
+              "stroke": circleData[4],
+              "cx": xScale(circleData[1]),
+              "cy": yScale(circleData[2]),
+              "r": ping_size,
+              "opacity": 0.8,
+          })
+          .transition()
+          .duration(250)
+          .attr("r", ping_size )
+          .attr('opacity', 0.5)
+
+        } // end myTransition
+
+        circleGroup = svg.append("g")
+                         .attr("class", "circles");
+
+        circleGroup.selectAll("circle")
+          .data(station_data)
+          .enter()
+          .append("circle")
+          .each(myTransition);
+
+      } // end of if
+
+      if (count*time_interval % 30 == 0) {
+        console.log(getTime(count))
+      }
+      // Stop after a certain number of points is made
+      count++;
+      if (count == 1440/time_interval) {
+        console.log('Did', count, 'points.')
+        count = 0;
+        toggleInterval(1);
+      }
+
+    } // end of if
+
+    svg.selectAll('.ring'+(count-3).toString())
+          .transition()
+          .duration(250)
+          .attr('opacity', 0)
+          .remove();
+  }
+} // end makeRings
+
+</script>
+
+</div>
+
+</body>
