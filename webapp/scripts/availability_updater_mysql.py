@@ -6,7 +6,7 @@ import os
 import time
 import simplejson as json
 import resource
-import MySQLdb
+import mysql.connector
 
 mysql_host = os.getenv('JAWSDB_HOST')
 mysql_username = os.getenv('JAWSDB_USERNAME')
@@ -122,7 +122,7 @@ print start_time
 ## Get data
 entry = doTimePoint()
 ## Open a connection to the database
-mysqldb = MySQLdb.connect(host=mysql_host, user=mysql_username, passwd=mysql_password, db=mysql_database)
+mysqldb = mysql.connector.connect(host=mysql_host, user=mysql_username, passwd=mysql_password, db=mysql_database)
 cur = mysqldb.cursor()
 time_interval = 10
 prev_time_point_time = pd.to_datetime(entry['datetime']) - datetime.timedelta(minutes = time_interval)
@@ -171,7 +171,7 @@ print('Updating station_availability table...')
 cur.execute("SELECT timepoint FROM station_availability;")
 result = cur.fetchall()
 ## Make a cutoff time point (2 days is about the most I can have without going over the free space limit in JawsDB mysql)
-cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 9)
+cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 15)
 ## Remove time points before the cutoff time point
 all_timepoints = []
 timepoints_to_remove = []
