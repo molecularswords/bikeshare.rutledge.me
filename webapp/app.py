@@ -30,11 +30,11 @@ def dots_heatmap():
     return app.send_static_file('animated_availability_heatmap.html')
 
 @app.route('/')
-def dots_heatmap():
+def weekday_clusters():
     return app.send_static_file('weekday_clusters.html')
 
 @app.route('/')
-def dots_heatmap():
+def weekend_clusters():
     return app.send_static_file('weekend_clusters.html')
 
 
