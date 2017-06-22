@@ -109,25 +109,10 @@ The suggestion for where to pick up and drop off a bike will be determined by fi
 			/*border-color: #cf1515;*/
 			color: #fff;
 		}
+
 		.grey {
 			background-color: #ddd;
 		}
-
-		/*input,
-		select,
-		button {
-			text-align: center;
-			font-size: 20px;
-			font-family: Montserrat;
-			font-weight: lighter;
-		}*/
-
-		/*#start_station_prediction {
-			text-align: center;
-			font-size: 20px;
-			font-family: Montserrat;
-			font-weight: lighter;
-		}*/
 
 		path {
 			stroke-width: 2;
@@ -684,18 +669,18 @@ The suggestion for where to pick up and drop off a bike will be determined by fi
 						                    	setEnd(end_test);
 						                    	note1 = 'NOTE: YOUR START AND END STATIONS WERE AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF BIKE AND DOCK AVAILABILITY! New start station: ';
 						                    	note2 = '. New end station: ';
-						                    	document.getElementById('curr_stations').innerHTML = note1.concat(markers[start_test].title, note2, markers[end_test].title, '.');
+						                    	document.getElementById('curr_stations').innerHTML = "<b>"+note1.concat(markers[start_test].title, note2, markers[end_test].title, '.</b>');
 						                    	console.log("********** START CHANGED TO ", markers[start_test].title, start_test, "**********")
 						                    	console.log("********** END CHANGED TO ", markers[end_test].title, end_test, "**********")
 						                  	} else if (start_id != start_test) {
 							                    setStart(start_test);
 							                    note1 = 'NOTE: YOUR START STATION WAS AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF BIKE AVAILABILITY! New start station: ';
-							                    document.getElementById('curr_stations').innerHTML = note1.concat(markers[start_test].title, '.');
+							                    document.getElementById('curr_stations').innerHTML = "<b>"+note1.concat(markers[start_test].title, '.</b>');
 							                    console.log("********** START CHANGED TO ", markers[start_test].title, start_test, "**********")
 						                  	} else if (end_id != end_test) {
 							                    setEnd(end_test);
 							                    note1 = 'NOTE: YOUR END STATION WAS AUTOMATICALLY CHANGED BECAUSE OF A HIGH POSSIBILITY OF A LACK OF DOCK AVAILABILITY! New end station: ';
-							                    document.getElementById('curr_stations').innerHTML = note1.concat(markers[end_test].title, '.');
+							                    document.getElementById('curr_stations').innerHTML = "<b>"+note1.concat(markers[end_test].title, '.</b>');
 							                    console.log("********** END CHANGED TO ", markers[end_test].title, end_test, "**********")
 						                  	}
 			                  
