@@ -1,7 +1,9 @@
 import pandas as pd
+import numpy as np
 import xml.etree.ElementTree as ET
 import urllib2
 import datetime
+import re
 import os
 import time
 import simplejson as json
@@ -130,7 +132,6 @@ prev_time_point_time = pd.to_datetime(entry['datetime']) - datetime.timedelta(mi
 ##################### STATION LOCATIONS PART ###########################
 ## Create the station_locations table
 stat_locs = entry['station_locations']
-stat_locs_keys = sorted(stat_locs.keys())
 
 try:
     create_table_string = "CREATE TABLE station_locations (station FLOAT (5) NOT NULL, lat FLOAT (8), lng FLOAT (8), name VARCHAR (70), capacity INT (3), PRIMARY KEY (station));"
@@ -140,17 +141,50 @@ except:
     print('station_locations table already exists.')
 
 print('Updating station_locations table...')
+## See what has changed in the station locations table and only update the changes
+cur.execute("SELECT * FROM station_locations;")
+stat_locs_dict = {}
+for ent in cur.fetchall():
+    stat = str(int(ent[0]))
+    temp_dict_stats_locs = stat_locs.get(stat, 0)
+    temp_dict_entry = {'lat': float(ent[1]), 'lng': float(ent[2]), 'capacity': int(ent[4]), 'name': str(ent[3])}
+    if type(temp_dict_stats_locs) == int:
+        stat_locs_dict[stat] = temp_dict_entry
+    else:
+        for key in temp_dict_entry.keys():
+            if key == 'lat' or key == 'lng':
+                temp_dict_entry_ent = float("{0:.4f}".format(round(float(temp_dict_entry[key]), 4)))
+                temp_dict_stats_locs_ent = float("{0:.4f}".format(round(float(temp_dict_stats_locs[key]), 4)))
+                if np.abs(temp_dict_entry_ent - temp_dict_stats_locs_ent) < 0.0002:
+                    temp_dict_entry_ent = temp_dict_stats_locs_ent
+            elif key == 'capacity':
+                temp_dict_entry_ent = int(temp_dict_entry[key])
+                temp_dict_stats_locs_ent = int(temp_dict_stats_locs[key])
+            else:
+                temp_dict_entry_ent = temp_dict_entry[key]
+                temp_dict_stats_locs_ent = re.sub(r'\\','', temp_dict_stats_locs[key])
+            if temp_dict_entry_ent != temp_dict_stats_locs_ent:
+                temp_dict_entry[key] = temp_dict_stats_locs_ent
+                stat_locs_dict[stat] = temp_dict_entry
 
-for stat in stat_locs_keys:
-    try:
-        cur.execute("INSERT INTO station_locations (station) VALUES ("+str(stat)+");")
-    except:
-        blarghbleh = 1
-    cur.execute("UPDATE station_locations SET lat = "+str(stat_locs[stat]['lat'])+" WHERE station = "+str(stat)+";")
-    cur.execute("UPDATE station_locations SET lng = "+str(stat_locs[stat]['lng'])+" WHERE station = "+str(stat)+";")
-    cur.execute('UPDATE station_locations SET name = "'+str(stat_locs[stat]['name'])+'" WHERE station = '+str(stat)+';')
-    cur.execute('UPDATE station_locations SET capacity = '+str(stat_locs[stat]['capacity'])+' WHERE station = '+str(stat)+';')
+# print(stat_locs_dict)
 
+try:
+    stat_locs_dict_keys = sorted(stat_locs_dict.keys())
+except:
+    stat_locs_dict_keys = []
+
+if len(stat_locs_dict_keys) > 0:
+    for stat in stat_locs_dict_keys:
+        try:
+            cur.execute("INSERT INTO station_locations (station) VALUES ("+str(stat)+");")
+        except:
+            blarghbleh = 1
+        cur.execute("UPDATE station_locations SET lat = "+str(stat_locs_dict[stat]['lat'])+" WHERE station = "+str(stat)+";")
+        cur.execute("UPDATE station_locations SET lng = "+str(stat_locs_dict[stat]['lng'])+" WHERE station = "+str(stat)+";")
+        cur.execute('UPDATE station_locations SET name = "'+str(stat_locs_dict[stat]['name'])+'" WHERE station = '+str(stat)+';')
+        cur.execute('UPDATE station_locations SET capacity = '+str(stat_locs_dict[stat]['capacity'])+' WHERE station = '+str(stat)+';')
+mysqldb.commit()
 
 ##################### STATION AVAILABILITY PART ###########################
 ## Create the station_availability table
@@ -158,28 +192,38 @@ stat_avail = entry['station_availability']
 stat_avail_keys = sorted(stat_avail.keys())
 ## Create table if it doesn't already exist
 try:
-    create_table_string = "CREATE TABLE station_availability (timepoint VARCHAR (20) NOT NULL, `"
-    for each in stat_avail_keys[0:-1]:
-        create_table_string += str(each) + "` INT, `"
-    create_table_string += str(stat_avail_keys[-1]) + "` INT, PRIMARY KEY (timepoint));"
+    create_table_string = "CREATE TABLE station_availability (timepoint VARCHAR (20) NOT NULL"
+    for each in stat_avail_keys:
+        create_table_string += ", `"+str(each)+"` INT"
+    create_table_string += ", PRIMARY KEY (timepoint));"
     cur.execute(create_table_string)
     print('Created station_availability table.')
 except:
     blarghbleh = 1
+
 print('Updating station_availability table...')
 ## Get a list of timepoints from table
 cur.execute("SELECT timepoint FROM station_availability;")
 result = cur.fetchall()
 ## Make a cutoff time point (2 days is about the most I can have without going over the free space limit in JawsDB mysql)
-cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 15)
-## Remove time points before the cutoff time point
+cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 9)
+## Make a list of timepoints to remove from before the cutoff time point
 all_timepoints = []
 timepoints_to_remove = []
 for each in result:
-    all_timepoints.append(pd.to_datetime(each[0]))
     if pd.to_datetime(each[0]) < cutoff_time_point:
-        delete_timepoint_string = "DELETE FROM station_availability WHERE timepoint = '"+str(each[0])+"';"
-        cur.execute(delete_timepoint_string)
+        timepoints_to_remove.append(each[0])
+    else:
+        all_timepoints.append(pd.to_datetime(each[0]))
+
+## Remove time points before the cutoff time point
+if len(timepoints_to_remove) > 0:
+    delete_timepoint_string = "DELETE FROM station_availability WHERE timepoint IN ('"+str(timepoints_to_remove[0])+"'"
+    for each in timepoints_to_remove[1:]:
+        delete_timepoint_string += ", '"+str(each)+"'"
+    delete_timepoint_string += ");"
+    cur.execute(delete_timepoint_string)
+
 ## See if there are any missing time points
 if len(all_timepoints) > 0:
     time_range = pd.date_range(start = all_timepoints[0], end = all_timepoints[-1], freq = '10min')
@@ -199,15 +243,36 @@ if len(all_timepoints) > 0:
         cur.execute(update_string_3)
         ## Drop the temporary table
         cur.execute("DROP TABLE tmp;")
-## Insert new timepoint into table
+
+## Get station names from table
+cur.execute("SHOW COLUMNS FROM station_availability;")
+current_stations = []
+for each in cur.fetchall():
+    if each[0] == 'timepoint':
+        continue
+    else:
+        current_stations.append(str(each[0]))
+## Make a list of new stations
+new_stations = sorted(list(set(current_stations).symmetric_difference(stat_avail_keys)))
+## Add each new station to the table
+if len(new_stations) > 0:
+    sql_string = "ALTER TABLE station_availability ADD COLUMN `"+str(new_stations[0])+"` INT"
+    for stat in new_stations[1:]:
+        sql_string += ", ADD COLUMN `"+str(stat)+"` INT"
+    sql_string += ";"
+    cur.execute(sql_string)
+
+## Insert new timepoint data into table
+sql_string_1 = "INSERT INTO station_availability (timepoint"
+sql_string_2 = "VALUES ('"+str(entry['datetime'])+"'"
+for stat in stat_avail_keys:
+    sql_string_1 += ", `"+str(stat)+"`"
+    sql_string_2 += ", "+str(stat_avail[stat])
+
+sql_string_1 += ") "
+sql_string_2 += ");"
 try:
-    cur.execute("INSERT INTO station_availability (timepoint) VALUES ('"+str(entry['datetime'])+"');")
-    for stat in stat_avail_keys:
-        try:
-            cur.execute("ALTER TABLE station_availability ADD `"+str(stat)+"` INT;")
-        except Exception as e:
-            blarghbleh = 1
-        cur.execute("UPDATE station_availability SET `"+str(stat)+"` = "+str(stat_avail[stat])+" WHERE timepoint = '"+str(entry['datetime'])+"';")
+    cur.execute(sql_string_1+sql_string_2)
 except:
     print('Time point already in database.')
 

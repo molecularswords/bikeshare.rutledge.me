@@ -24,11 +24,11 @@ Once the embarkation and docking stations are determined the algorithm then make
 
 ## Data Analysis and Results
 
-- [Data gathering and preparation](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/data_wrangling.ipynb)
-- [Exploratory data analysis](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/EDA.ipynb)
-- [Modeling whole system](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/modeling_whole_system.ipynb)
-- [Modeling indivdual stations](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/modeling_individual_stations.ipynb)
-- [Make predictive model for webapp](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/scripts/predict_availability_for_web.ipynb)
+- [Data gathering and preparation](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/webapp/scripts/data_wrangling.ipynb)
+- [Exploratory data analysis](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/webapp/scripts/EDA.ipynb)
+- [Modeling whole system](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/webapp/scripts/modeling_whole_system.ipynb)
+- [Modeling indivdual stations](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/webapp/scripts/modeling_individual_stations.ipynb)
+- [Make predictive model for webapp](https://github.com/molecularswords/bikeshare.rutledge.me/blob/master/webapp/scripts/predict_availability_for_web.ipynb)
 
 ##### Fun tip
 

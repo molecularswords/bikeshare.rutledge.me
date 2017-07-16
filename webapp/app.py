@@ -208,9 +208,15 @@ def dots_ping_data():
             values = []
             for each in cur.fetchall():
                 timepoints.append(each[0])
-                values.append(each[1:])
+                vals = each[1:]
+                for i, val in enumerate(vals):
+                    if not val:
+                        vals[i] == np.nan
+                values.append(vals)
 
             df = pd.DataFrame(values, index = timepoints, columns = station_names)
+            df.dropna(axis = 1, how = 'any', inplace = True)
+
             rides_df = (df - df.shift(1)).dropna(axis = 0).astype(int)
             rides = {}
             for ind in rides_df.index:
@@ -275,9 +281,15 @@ def dots_heatmap_data():
             values = []
             for each in cur.fetchall():
                 timepoints.append(each[0])
-                values.append(each[1:])
+                vals = each[1:]
+                for i, val in enumerate(vals):
+                    if not val:
+                        vals[i] == np.nan
+                values.append(vals)
 
-            df = pd.DataFrame(values, index = timepoints, columns = station_names).astype(int)
+            df = pd.DataFrame(values, index = timepoints, columns = station_names)
+            df.dropna(axis = 1, how = 'any', inplace = True)
+            df = df.astype(int)
             
             return df.T.to_dict()
 
