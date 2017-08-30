@@ -190,59 +190,60 @@ mysqldb.commit()
 ## Create the station_availability table
 stat_avail = entry['station_availability']
 stat_avail_keys = sorted(stat_avail.keys())
+
 ## Create table if it doesn't already exist
-try:
-    create_table_string = "CREATE TABLE station_availability (timepoint VARCHAR (20) NOT NULL"
-    for each in stat_avail_keys:
-        create_table_string += ", `"+str(each)+"` INT"
-    create_table_string += ", PRIMARY KEY (timepoint));"
-    cur.execute(create_table_string)
-    print('Created station_availability table.')
-except:
-    blarghbleh = 1
+# try:
+#     create_table_string = "CREATE TABLE station_availability (timepoint VARCHAR (20) NOT NULL"
+#     for each in stat_avail_keys:
+#         create_table_string += ", `"+str(each)+"` INT"
+#     create_table_string += ", PRIMARY KEY (timepoint));"
+#     cur.execute(create_table_string)
+#     print('Created station_availability table.')
+# except:
+#     blarghbleh = 1
 
-print('Updating station_availability table...')
-## Get a list of timepoints from table
-cur.execute("SELECT timepoint FROM station_availability;")
-result = cur.fetchall()
-## Make a cutoff time point (2 days is about the most I can have without going over the free space limit in JawsDB mysql)
-cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 9)
-## Make a list of timepoints to remove from before the cutoff time point
-all_timepoints = []
-timepoints_to_remove = []
-for each in result:
-    if pd.to_datetime(each[0]) < cutoff_time_point:
-        timepoints_to_remove.append(each[0])
-    else:
-        all_timepoints.append(pd.to_datetime(each[0]))
+# print('Updating station_availability table...')
+# ## Get a list of timepoints from table
+# cur.execute("SELECT timepoint FROM station_availability;")
+# result = cur.fetchall()
+# ## Make a cutoff time point (2 days is about the most I can have without going over the free space limit in JawsDB mysql)
+# cutoff_time_point = pd.to_datetime(entry['datetime']) - datetime.timedelta(days = 9)
+# ## Make a list of timepoints to remove from before the cutoff time point
+# all_timepoints = []
+# timepoints_to_remove = []
+# for each in result:
+#     if pd.to_datetime(each[0]) < cutoff_time_point:
+#         timepoints_to_remove.append(each[0])
+#     else:
+#         all_timepoints.append(pd.to_datetime(each[0]))
 
-## Remove time points before the cutoff time point
-if len(timepoints_to_remove) > 0:
-    delete_timepoint_string = "DELETE FROM station_availability WHERE timepoint IN ('"+str(timepoints_to_remove[0])+"'"
-    for each in timepoints_to_remove[1:]:
-        delete_timepoint_string += ", '"+str(each)+"'"
-    delete_timepoint_string += ");"
-    cur.execute(delete_timepoint_string)
+# ## Remove time points before the cutoff time point
+# if len(timepoints_to_remove) > 0:
+#     delete_timepoint_string = "DELETE FROM station_availability WHERE timepoint IN ('"+str(timepoints_to_remove[0])+"'"
+#     for each in timepoints_to_remove[1:]:
+#         delete_timepoint_string += ", '"+str(each)+"'"
+#     delete_timepoint_string += ");"
+#     cur.execute(delete_timepoint_string)
 
-## See if there are any missing time points
-if len(all_timepoints) > 0:
-    time_range = pd.date_range(start = all_timepoints[0], end = all_timepoints[-1], freq = '10min')
-    missing_time_points = sorted(list(set(time_range).symmetric_difference(all_timepoints)))
-    ## Go through missing time points and forward fill values
-    for timepoint in missing_time_points:
-        curr_timepoint = timepoint.strftime('%Y-%m-%d %H:%M')
-        prev_timepoint = (timepoint - datetime.timedelta(minutes = 10)).strftime('%Y-%m-%d %H:%M')
-        ## Make a temporary table to harbor the data to be forward filled
-        update_string_1 = "CREATE TEMPORARY TABLE tmp SELECT * FROM station_availability WHERE timepoint = '"+str(prev_timepoint)+"';"
-        cur.execute(update_string_1)
-        ## Rename the timepoint in the temporary table to the missing timepoint
-        update_string_2 = "UPDATE tmp SET timepoint = '"+str(curr_timepoint)+"' WHERE timepoint = '"+str(prev_timepoint)+"';"
-        cur.execute(update_string_2)
-        ## Insert the data in the temp table into station_availability
-        update_string_3 = "INSERT INTO station_availability SELECT * FROM tmp WHERE timepoint = '"+str(curr_timepoint)+"';"
-        cur.execute(update_string_3)
-        ## Drop the temporary table
-        cur.execute("DROP TABLE tmp;")
+# ## See if there are any missing time points
+# if len(all_timepoints) > 0:
+#     time_range = pd.date_range(start = all_timepoints[0], end = all_timepoints[-1], freq = '10min')
+#     missing_time_points = sorted(list(set(time_range).symmetric_difference(all_timepoints)))
+#     ## Go through missing time points and forward fill values
+#     for timepoint in missing_time_points:
+#         curr_timepoint = timepoint.strftime('%Y-%m-%d %H:%M')
+#         prev_timepoint = (timepoint - datetime.timedelta(minutes = 10)).strftime('%Y-%m-%d %H:%M')
+#         ## Make a temporary table to harbor the data to be forward filled
+#         update_string_1 = "CREATE TEMPORARY TABLE tmp SELECT * FROM station_availability WHERE timepoint = '"+str(prev_timepoint)+"';"
+#         cur.execute(update_string_1)
+#         ## Rename the timepoint in the temporary table to the missing timepoint
+#         update_string_2 = "UPDATE tmp SET timepoint = '"+str(curr_timepoint)+"' WHERE timepoint = '"+str(prev_timepoint)+"';"
+#         cur.execute(update_string_2)
+#         ## Insert the data in the temp table into station_availability
+#         update_string_3 = "INSERT INTO station_availability SELECT * FROM tmp WHERE timepoint = '"+str(curr_timepoint)+"';"
+#         cur.execute(update_string_3)
+#         ## Drop the temporary table
+#         cur.execute("DROP TABLE tmp;")
 
 ## Get station names from table
 cur.execute("SHOW COLUMNS FROM station_availability;")
@@ -253,45 +254,49 @@ for each in cur.fetchall():
     else:
         current_stations.append(str(each[0]))
 ## Make a list of new stations
-new_stations = sorted(list(set(stat_avail_keys)-set(current_stations)))
-## Add each new station to the table
-if len(new_stations) > 0:
-    sql_string = "ALTER TABLE station_availability ADD COLUMN `"+str(new_stations[0])+"` INT"
-    for stat in new_stations[1:]:
-        sql_string += ", ADD COLUMN `"+str(stat)+"` INT"
-    sql_string += ";"
-    cur.execute(sql_string)
+new_stations = sorted(list(set(stat_avail_keys) - set(current_stations)))
+print(current_stations)
+print(stat_avail_keys)
+print(new_stations)
+# ## Add each new station to the table
+# if len(new_stations) > 0:
+#     sql_string = "ALTER TABLE station_availability ADD COLUMN `"+str(new_stations[0])+"` INT"
+#     for stat in new_stations[1:]:
+#         sql_string += ", ADD COLUMN `"+str(stat)+"` INT"
+#     sql_string += ";"
+#     cur.execute(sql_string)
 
-## Insert new timepoint data into table
-sql_string_1 = "INSERT INTO station_availability (timepoint"
-sql_string_2 = "VALUES ('"+str(entry['datetime'])+"'"
-for stat in stat_avail_keys:
-    sql_string_1 += ", `"+str(stat)+"`"
-    sql_string_2 += ", "+str(stat_avail[stat])
+# ## Insert new timepoint data into table
+# sql_string_1 = "INSERT INTO station_availability (timepoint"
+# sql_string_2 = "VALUES ('"+str(entry['datetime'])+"'"
+# for stat in stat_avail_keys:
+#     sql_string_1 += ", `"+str(stat)+"`"
+#     sql_string_2 += ", "+str(stat_avail[stat])
 
-sql_string_1 += ") "
-sql_string_2 += ");"
-try:
-    cur.execute(sql_string_1+sql_string_2)
-except:
-    print('Time point already in database.')
+# sql_string_1 += ") "
+# sql_string_2 += ");"
+# try:
+#     cur.execute(sql_string_1+sql_string_2)
+# except:
+#     print('Time point already in database.')
 
-## Commit the updates to the database and close the connection
-mysqldb.commit()
+# ## Commit the updates to the database and close the connection
+# mysqldb.commit()
 
-get_size_string = 'SELECT table_schema "DB Name", Round(Sum(data_length + index_length) / 1024 / 1024, 1) "DB Size in MB" FROM information_schema.tables GROUP BY table_schema;'
-cur.execute(get_size_string)
-res = cur.fetchall()
-for each in res:
-    print('Database size is '+str(res[0][1])+' MB.')
-    break
-try:
-    print('Number of entries is '+str(len(time_range)))+'.'
-    print('Size per entry is rougly '+str(res[0][1]/len(time_range)))+'.'
-except:
-    print 'This was the first entry!'
+# get_size_string = 'SELECT table_schema "DB Name", Round(Sum(data_length + index_length) / 1024 / 1024, 1) "DB Size in MB" FROM information_schema.tables GROUP BY table_schema;'
+# cur.execute(get_size_string)
+# res = cur.fetchall()
+# for each in res:
+#     print('Database size is '+str(res[0][1])+' MB.')
+#     break
+# try:
+#     print('Number of entries is '+str(len(time_range)))+'.'
+#     print('Size per entry is rougly '+str(res[0][1]/len(time_range)))+'.'
+# except:
+#     print 'This was the first entry!'
 
 mysqldb.close()
 
 print('Final memory usage: %s (kb)' % resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
 print('Script took ' + str(datetime.datetime.now() - start_time))
+#print "#####################################################################"
